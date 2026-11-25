@@ -801,10 +801,20 @@
       });
     }
 
+    let hasLocalServer = null;
+
     async function loadFromWorkspace() {
       try {
-        setStatus(loadStatusEl, "Đang tải file từ thư mục...");
+        setStatus(loadStatusEl, "Đang kiểm tra thư mục cục bộ...");
         const res = await fetch("/api/assets");
+        const ct = res.headers.get("content-type") || "";
+        if (!res.ok || !ct.includes("application/json")) {
+          hasLocalServer = false;
+          document.getElementById("reloadWorkspaceBtn").style.display = "none";
+          setStatus(loadStatusEl, "Chế độ web tĩnh: Kéo-thả bộ file Spine, bấm 'Chọn cả thư mục' hoặc dán link URL để bắt đầu.");
+          return;
+        }
+        hasLocalServer = true;
         const { files } = await res.json();
         const sets = groupSpineEntries(files.map((p) => ({ path: p })));
         renderAssetList(sets, (s) => loadWorkspaceSet(s).catch((err) => setStatus(loadStatusEl, "Lỗi nạp file: " + err.message, "err")));
@@ -815,8 +825,9 @@
         }
         await loadWorkspaceSet(sets[0]);
       } catch (err) {
-        console.error(err);
-        setStatus(loadStatusEl, "Lỗi nạp file: " + err.message, "err");
+        hasLocalServer = false;
+        document.getElementById("reloadWorkspaceBtn").style.display = "none";
+        setStatus(loadStatusEl, "Chế độ web tĩnh: Kéo-thả bộ file Spine, bấm 'Chọn cả thư mục' hoặc dán link URL để bắt đầu.");
       }
     }
 
@@ -864,16 +875,32 @@
     }
 
     async function fetchViaProxy(targetUrl) {
-      const res = await fetch("/api/fetch-url?url=" + encodeURIComponent(targetUrl));
-      if (!res.ok) {
-        let errMsg = `HTTP ${res.status}`;
+      if (hasLocalServer !== false) {
         try {
-          const j = await res.json();
-          if (j.error) errMsg = j.error;
-        } catch {}
-        throw new Error(errMsg);
+          const res = await fetch("/api/fetch-url?url=" + encodeURIComponent(targetUrl));
+          if (res.status !== 404 && res.status !== 405) {
+            if (!res.ok) {
+              let errMsg = `HTTP ${res.status}`;
+              try {
+                const j = await res.json();
+                if (j.error) errMsg = j.error;
+              } catch {}
+              throw new Error(errMsg);
+            }
+            return res;
+          }
+          hasLocalServer = false;
+        } catch (err) {
+          if (hasLocalServer === true) throw err;
+        }
       }
-      return res;
+      try {
+        const directRes = await fetch(targetUrl);
+        if (!directRes.ok) throw new Error(`HTTP ${directRes.status}`);
+        return directRes;
+      } catch (err) {
+        throw new Error(`Không tải được URL trực tiếp (có thể do chặn CORS): ${err.message}`);
+      }
     }
 
     async function loadFromUrls() {
@@ -1070,6 +1097,35 @@
       requestAnimationFrame(loop);
     }
 
+    // Browser FFmpeg.wasm loader (used on static hosts like Netlify)
+    let browserFfmpegInstance = null;
+    function loadScriptOnce(src) {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) return resolve();
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error(`Không tải được ${src}`));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function getBrowserFfmpeg() {
+      if (browserFfmpegInstance) return browserFfmpegInstance;
+      await loadScriptOnce("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js");
+      await loadScriptOnce("https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js");
+      const { FFmpeg } = window.FFmpegWASM;
+      const { toBlobURL } = window.FFmpegUtil;
+      const ffmpeg = new FFmpeg();
+      await ffmpeg.load({
+        classWorkerURL: await toBlobURL("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js", "text/javascript"),
+        coreURL: await toBlobURL("https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js", "text/javascript"),
+        wasmURL: await toBlobURL("https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm", "application/wasm"),
+      });
+      browserFfmpegInstance = ffmpeg;
+      return ffmpeg;
+    }
+
     // Export pipeline
     const EXPORT_FILE_TYPES = {
       gif: [{ description: "GIF Image", accept: { "image/gif": [".gif"] } }],
@@ -1161,75 +1217,167 @@
           return;
         }
 
-        setStatus(exportStatusEl, `Đang khởi tạo xuất ${totalFrames} khung hình (${fps} fps)...`);
-        const startRes = await fetch("/api/export-start", { method: "POST" });
-        const { sessionId } = await startRes.json();
+        const EXPORT_MIMES = {
+          gif: "image/gif",
+          webm: "video/webm",
+          apng: "image/png",
+          mp4: "video/mp4",
+        };
 
-        for (let i = 0; i < totalFrames; i++) {
-          const t = (i / fps);
-          if (track) {
-            track.trackTime = t;
-          }
-          renderFrame();
-
-          const blob = await new Promise((resolve) =>
-            compositeCanvas.toBlob(resolve, "image/png")
-          );
-          const buf = await blob.arrayBuffer();
-
-          await fetch("/api/export-frame", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/octet-stream",
-              "x-session-id": sessionId,
-              "x-frame-index": String(i),
-            },
-            body: buf,
-          });
-
-          const pct = Math.round(((i + 1) / totalFrames) * 85);
-          progressFillEl.style.width = pct + "%";
-          setStatus(exportStatusEl, `Đang render khung ${i + 1}/${totalFrames}...`);
-        }
-
-        if (track) track.trackTime = prevTime;
-
-        setStatus(exportStatusEl, "Đang ghép bằng FFmpeg...");
-        progressFillEl.style.width = "92%";
-
-        const finishRes = await fetch("/api/export-finish", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            format,
-            fps,
-            baseName: currentBaseName,
-          }),
-        });
-        const result = await finishRes.json();
-        if (!result.ok) throw new Error(result.error || "Xuất thất bại");
-
-        progressFillEl.style.width = "100%";
-        if (fileHandle) {
-          setStatus(exportStatusEl, "Đang lưu file vào vị trí đã chọn...");
-          const fileRes = await fetch(result.url);
-          if (!fileRes.ok) throw new Error("Không thể tải file đã xuất");
-          const writable = await fileHandle.createWritable();
-          if (fileRes.body && fileRes.body.pipeTo) {
-            await fileRes.body.pipeTo(writable);
-          } else {
-            const outBlob = await fileRes.blob();
+        async function saveBlobOutput(outBlob, outFilename) {
+          if (fileHandle) {
+            setStatus(exportStatusEl, "Đang lưu file vào vị trí đã chọn...");
+            const writable = await fileHandle.createWritable();
             await writable.write(outBlob);
             await writable.close();
+            setStatus(exportStatusEl, `Hoàn tất! Đã lưu file: ${fileHandle.name}`, "ok");
+          } else {
+            const blobUrl = URL.createObjectURL(outBlob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = outFilename;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            setStatus(exportStatusEl, `Hoàn tất! Đã tải về: ${outFilename}`, "ok");
           }
-          setStatus(exportStatusEl, `Hoàn tất! Đã lưu file: ${fileHandle.name}`, "ok");
+        }
+
+        if (hasLocalServer === true) {
+          setStatus(exportStatusEl, `Đang khởi tạo xuất ${totalFrames} khung hình (${fps} fps)...`);
+          const startRes = await fetch("/api/export-start", { method: "POST" });
+          const { sessionId } = await startRes.json();
+
+          for (let i = 0; i < totalFrames; i++) {
+            const t = (i / fps);
+            if (track) track.trackTime = t;
+            renderFrame();
+
+            const blob = await new Promise((resolve) =>
+              compositeCanvas.toBlob(resolve, "image/png")
+            );
+            const buf = await blob.arrayBuffer();
+
+            await fetch("/api/export-frame", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/octet-stream",
+                "x-session-id": sessionId,
+                "x-frame-index": String(i),
+              },
+              body: buf,
+            });
+
+            const pct = Math.round(((i + 1) / totalFrames) * 85);
+            progressFillEl.style.width = pct + "%";
+            setStatus(exportStatusEl, `Đang render khung ${i + 1}/${totalFrames}...`);
+          }
+
+          if (track) track.trackTime = prevTime;
+
+          setStatus(exportStatusEl, "Đang ghép bằng FFmpeg...");
+          progressFillEl.style.width = "92%";
+
+          const finishRes = await fetch("/api/export-finish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId,
+              format,
+              fps,
+              baseName: currentBaseName,
+            }),
+          });
+          const result = await finishRes.json();
+          if (!result.ok) throw new Error(result.error || "Xuất thất bại");
+
+          progressFillEl.style.width = "100%";
+          if (fileHandle) {
+            setStatus(exportStatusEl, "Đang lưu file vào vị trí đã chọn...");
+            const fileRes = await fetch(result.url);
+            if (!fileRes.ok) throw new Error("Không thể tải file đã xuất");
+            const writable = await fileHandle.createWritable();
+            if (fileRes.body && fileRes.body.pipeTo) {
+              await fileRes.body.pipeTo(writable);
+            } else {
+              const outBlob = await fileRes.blob();
+              await writable.write(outBlob);
+              await writable.close();
+            }
+            setStatus(exportStatusEl, `Hoàn tất! Đã lưu file: ${fileHandle.name}`, "ok");
+          } else {
+            const a = document.createElement("a");
+            a.href = result.url;
+            a.download = result.filename;
+            a.click();
+            setStatus(exportStatusEl, `Hoàn tất! Đã tải về: ${result.filename}`, "ok");
+          }
         } else {
-          const a = document.createElement("a");
-          a.href = result.url;
-          a.download = result.filename;
-          a.click();
-          setStatus(exportStatusEl, `Hoàn tất! Đã tải về: ${result.filename}`, "ok");
+          setStatus(exportStatusEl, "Đang tải bộ xử lý FFmpeg trên trình duyệt (lần đầu ~25MB)...");
+          const ffmpeg = await getBrowserFfmpeg();
+
+          const frameNames = [];
+          for (let i = 0; i < totalFrames; i++) {
+            const t = (i / fps);
+            if (track) track.trackTime = t;
+            renderFrame();
+
+            const blob = await new Promise((resolve) =>
+              compositeCanvas.toBlob(resolve, "image/png")
+            );
+            const fname = `frame_${String(i).padStart(5, "0")}.png`;
+            frameNames.push(fname);
+            await ffmpeg.writeFile(fname, new Uint8Array(await blob.arrayBuffer()));
+
+            const pct = Math.round(((i + 1) / totalFrames) * 80);
+            progressFillEl.style.width = pct + "%";
+            setStatus(exportStatusEl, `Đang render khung ${i + 1}/${totalFrames}...`);
+          }
+
+          if (track) track.trackTime = prevTime;
+
+          setStatus(exportStatusEl, "Đang ghép bằng FFmpeg.wasm trên trình duyệt...");
+          progressFillEl.style.width = "90%";
+
+          const rate = Math.max(1, Math.min(60, Number(fps) || 30));
+          const ext = EXPORT_EXTENSIONS[format] || "bin";
+          const outFile = `${safeBase}_${stamp}.${ext}`;
+          let ffmpegArgs;
+
+          if (format === "gif") {
+            ffmpegArgs = [
+              "-y", "-framerate", String(rate), "-i", "frame_%05d.png",
+              "-vf", "split[s0][s1];[s0]palettegen=reserve_transparent=1:stats_mode=diff[p];[s1][p]paletteuse=alpha_threshold=128",
+              "-loop", "0", outFile,
+            ];
+          } else if (format === "webm") {
+            ffmpegArgs = [
+              "-y", "-framerate", String(rate), "-i", "frame_%05d.png",
+              "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-b:v", "2M", "-auto-alt-ref", "0", outFile,
+            ];
+          } else if (format === "apng") {
+            ffmpegArgs = [
+              "-y", "-framerate", String(rate), "-i", "frame_%05d.png",
+              "-plays", "0", "-f", "apng", outFile,
+            ];
+          } else if (format === "mp4") {
+            ffmpegArgs = [
+              "-y", "-framerate", String(rate), "-i", "frame_%05d.png",
+              "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", outFile,
+            ];
+          } else {
+            throw new Error("Định dạng không được hỗ trợ");
+          }
+
+          await ffmpeg.exec(ffmpegArgs);
+          const outData = await ffmpeg.readFile(outFile);
+          for (const fn of frameNames) {
+            try { await ffmpeg.deleteFile(fn); } catch {}
+          }
+          try { await ffmpeg.deleteFile(outFile); } catch {}
+
+          progressFillEl.style.width = "100%";
+          const outBlob = new Blob([outData.buffer], { type: EXPORT_MIMES[format] || "application/octet-stream" });
+          await saveBlobOutput(outBlob, outFile);
         }
       } catch (err) {
         console.error(err);
