@@ -1,2 +1,8 @@
 [build]
   publish = "public"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/fetch-url"
+  to = "/.netlify/functions/fetch-url"
+  status = 200
