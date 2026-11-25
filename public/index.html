@@ -1117,7 +1117,6 @@
       const ffmpeg = new FFmpeg();
       const baseCDN = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
       await ffmpeg.load({
-        classWorkerURL: "/vendor/ffmpeg/814.ffmpeg.js",
         coreURL: await toBlobURL(`${baseCDN}/ffmpeg-core.js`, "text/javascript"),
         wasmURL: await toBlobURL(`${baseCDN}/ffmpeg-core.wasm`, "application/wasm"),
       });
