@@ -334,6 +334,32 @@ const server = http.createServer(async (req, res) => {
           "apng",
           outPath,
         ];
+      } else if (format === "webp") {
+        outFile = `${safeBase}_${stamp}.webp`;
+        const outPath = path.join(sessionDir, outFile);
+        ffmpegArgs = [
+          "-y",
+          "-framerate",
+          String(rate),
+          "-i",
+          inputPattern,
+          "-c:v",
+          "libwebp",
+          "-pix_fmt",
+          "yuva420p",
+          "-lossless",
+          "0",
+          "-q:v",
+          "85",
+          "-loop",
+          "0",
+          "-preset",
+          "default",
+          "-an",
+          "-vsync",
+          "0",
+          outPath,
+        ];
       } else if (format === "mp4") {
         outFile = `${safeBase}_${stamp}.mp4`;
         const outPath = path.join(sessionDir, outFile);
