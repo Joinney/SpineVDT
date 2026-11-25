@@ -1110,15 +1110,16 @@
 
     async function getBrowserFfmpeg() {
       if (browserFfmpegInstance) return browserFfmpegInstance;
-      await loadScriptOnce("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js");
-      await loadScriptOnce("https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js");
+      await loadScriptOnce("/vendor/ffmpeg/ffmpeg.js");
+      await loadScriptOnce("/vendor/ffmpeg/ffmpeg-util.js");
       const { FFmpeg } = window.FFmpegWASM;
       const { toBlobURL } = window.FFmpegUtil;
       const ffmpeg = new FFmpeg();
+      const baseCDN = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
       await ffmpeg.load({
-        classWorkerURL: await toBlobURL("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js", "text/javascript"),
-        coreURL: await toBlobURL("https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js", "text/javascript"),
-        wasmURL: await toBlobURL("https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm", "application/wasm"),
+        classWorkerURL: "/vendor/ffmpeg/814.ffmpeg.js",
+        coreURL: await toBlobURL(`${baseCDN}/ffmpeg-core.js`, "text/javascript"),
+        wasmURL: await toBlobURL(`${baseCDN}/ffmpeg-core.wasm`, "application/wasm"),
       });
       browserFfmpegInstance = ffmpeg;
       return ffmpeg;
@@ -1379,7 +1380,8 @@
         }
       } catch (err) {
         console.error(err);
-        setStatus(exportStatusEl, "Lỗi xuất: " + err.message, "err");
+        const errMsg = (err && err.message) ? err.message : (typeof err === "string" ? err : String(err));
+        setStatus(exportStatusEl, "Lỗi xuất: " + errMsg, "err");
       } finally {
         isExporting = false;
         exportBtn.disabled = false;
