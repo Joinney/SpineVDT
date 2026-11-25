@@ -449,7 +449,6 @@
           Định dạng
           <select id="exportFormat">
             <option value="gif">GIF động (Trong suốt)</option>
-            <option value="webp">WebP động (Trong suốt)</option>
             <option value="webm">WebM (Video trong suốt)</option>
             <option value="apng">APNG (Ảnh động PNG)</option>
             <option value="mp4">MP4 (Video H.264)</option>
@@ -1128,7 +1127,6 @@
     // Export pipeline
     const EXPORT_FILE_TYPES = {
       gif: [{ description: "GIF Image", accept: { "image/gif": [".gif"] } }],
-      webp: [{ description: "WebP Image", accept: { "image/webp": [".webp"] } }],
       webm: [{ description: "WebM Video", accept: { "video/webm": [".webm"] } }],
       apng: [{ description: "APNG Image", accept: { "image/png": [".png"] } }],
       mp4: [{ description: "MP4 Video", accept: { "video/mp4": [".mp4"] } }],
@@ -1136,7 +1134,6 @@
 
     const EXPORT_EXTENSIONS = {
       gif: "gif",
-      webp: "webp",
       webm: "webm",
       apng: "png",
       mp4: "mp4",
@@ -1220,7 +1217,6 @@
 
         const EXPORT_MIMES = {
           gif: "image/gif",
-          webp: "image/webp",
           webm: "video/webm",
           apng: "image/png",
           mp4: "video/mp4",
@@ -1351,11 +1347,6 @@
               "-vf", "split[s0][s1];[s0]palettegen=reserve_transparent=1:stats_mode=diff[p];[s1][p]paletteuse=alpha_threshold=128",
               "-loop", "0", outFile,
             ];
-          } else if (format === "webp") {
-            ffmpegArgs = [
-              "-y", "-framerate", String(rate), "-i", "frame_%05d.png",
-              "-c:v", "libwebp", "-pix_fmt", "yuva420p", "-lossless", "0", "-q:v", "85", "-loop", "0", "-preset", "default", "-an", "-vsync", "0", outFile,
-            ];
           } else if (format === "webm") {
             ffmpegArgs = [
               "-y", "-framerate", String(rate), "-i", "frame_%05d.png",
@@ -1375,7 +1366,19 @@
             throw new Error("Định dạng không được hỗ trợ");
           }
 
-          await ffmpeg.exec(ffmpegArgs);
+          let lastFfmpegLog = "";
+          const onFfmpegLog = ({ message }) => {
+            if (message) lastFfmpegLog = message;
+          };
+          ffmpeg.on("log", onFfmpegLog);
+          try {
+            const exitCode = await ffmpeg.exec(ffmpegArgs);
+            if (exitCode !== 0) {
+              throw new Error(`FFmpeg thoát với mã ${exitCode}${lastFfmpegLog ? ": " + lastFfmpegLog : ""}`);
+            }
+          } finally {
+            ffmpeg.off("log", onFfmpegLog);
+          }
           const outData = await ffmpeg.readFile(outFile);
           for (const fn of frameNames) {
             try { await ffmpeg.deleteFile(fn); } catch {}
