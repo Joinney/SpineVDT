@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpineVDT</title>
+  <link rel="icon" type="image/jpeg" href="/logo.jpg" />
+  <link rel="apple-touch-icon" href="/logo.jpg" />
+  <script src="/spine-webgl.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --panel: #181b24;
+      --panel-2: #202431;
+      --border: #2d3344;
+      --text: #e6e9f0;
+      --muted: #939bb0;
+      --accent: #4f8cff;
+      --accent-hover: #3b76e8;
+      --success: #2ecc71;
+      --danger: #e74c3c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 340px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 16px;
+    }
+    .header h1 {
+      margin: 0 0 4px 0;
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .header p {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .card {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+    }
+    label {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    select, input[type="number"], input[type="range"], input[type="color"], input[type="url"] {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+    input[type="range"] { padding: 0; border: none; background: transparent; }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .row > * { flex: 1; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary {
+      background: #2b3142;
+      color: var(--text);
+    }
+    button.secondary:hover { background: #363d52; }
+    button.success { background: #1e9e54; }
+    button.success:hover { background: #198747; }
+
+    .dropzone {
+      border: 1.5px dashed var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(79, 140, 255, 0.08);
+      color: var(--text);
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .toolbar {
+      height: 52px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+    }
+    .stage-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      background-color: #161820;
+    }
+    .checkerboard {
+      background-image:
+        linear-gradient(45deg, #222633 25%, transparent 25%),
+        linear-gradient(-45deg, #222633 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #222633 75%),
+        linear-gradient(-45deg, transparent 75%, #222633 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+    }
+    .canvas-box {
+      position: relative;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .canvas-resize-handle {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 18px;
+      height: 18px;
+      cursor: nwse-resize;
+      background: linear-gradient(135deg, transparent 45%, var(--accent) 45%, var(--accent) 60%, transparent 60%, transparent 72%, var(--accent) 72%);
+      opacity: 0.75;
+      z-index: 5;
+    }
+    .canvas-resize-handle:hover {
+      opacity: 1;
+    }
+    #compositeCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #spineCanvas {
+      display: none;
+    }
+    .timeline-bar {
+      height: 58px;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+    }
+    .time-label {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+      color: var(--muted);
+      min-width: 95px;
+      text-align: right;
+    }
+    .status {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .status.ok { color: var(--success); }
+    .status.err { color: var(--danger); }
+    .progress-wrap {
+      width: 100%;
+      height: 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width 0.1s;
+    }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(79, 140, 255, 0.16);
+      color: #8eb6ff;
+    }
+    .list-box {
+      max-height: 150px;
+      overflow-y: auto;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--text);
+      background: transparent;
+      border: none;
+      text-align: left;
+      font-weight: 400;
+    }
+    .list-item:hover { background: rgba(255, 255, 255, 0.06); }
+    .list-item.active {
+      background: rgba(79, 140, 255, 0.22);
+      color: #b8d2ff;
+      font-weight: 600;
+    }
+    .slot-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 3px 6px;
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+      border-radius: 4px;
+      flex-direction: row;
+    }
+    .slot-item:hover { background: rgba(255, 255, 255, 0.05); }
+    .slot-item input { width: auto; margin: 0; }
+    .mini-btn {
+      padding: 3px 8px;
+      font-size: 11px;
+      border-radius: 5px;
+      flex: 0 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="header" style="display:flex;align-items:center;gap:10px;">
+      <img src="/logo.jpg" alt="SpineVDT" style="width:40px;height:40px;border-radius:10px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;" />
+      <div>
+        <h1>SpineVDT</h1>
+        <p>Ghép & xuất ảnh động Spine 4.2</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">1. Nguồn file Spine</div>
+      <div class="row">
+        <label>
+          Định dạng dữ liệu
+          <select id="dataMode">
+            <option value="json">JSON (.json) — Khuyên dùng</option>
+            <option value="skel">Binary (.skel)</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <button id="reloadWorkspaceBtn" class="secondary">Nạp lại thư mục</button>
+        <button id="pickFolderBtn" class="secondary">Chọn cả thư mục</button>
+        <input id="folderInput" type="file" webkitdirectory directory multiple hidden />
+      </div>
+      <div id="assetListWrap" style="display:none;flex-direction:column;gap:5px;">
+        <div class="row" style="justify-content:space-between;">
+          <span class="card-title" style="font-size:11px;">Danh sách bộ Spine (<span id="assetCount">0</span>)</span>
+        </div>
+        <div id="assetList" class="list-box"></div>
+      </div>
+      <div id="dropzone" class="dropzone">
+        Kéo thả bộ file (<code>.json/.skel</code>, <code>.atlas/.atlas.txt</code>, <code>.png</code>) vào đây hoặc bấm để chọn
+        <input id="fileInput" type="file" multiple accept=".json,.skel,.atlas,.txt,.png,.jpg,.jpeg,.webp" hidden />
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px;">
+        <div class="card-title" style="font-size:11px;">Hoặc dán link file trực tiếp (URL)</div>
+        <input id="urlSkeleton" type="url" placeholder="Link .json hoặc .skel (bắt buộc)" />
+        <input id="urlAtlas" type="url" placeholder="Link .atlas (để trống = tự suy ra)" />
+        <input id="urlPng" type="url" placeholder="Link .png (để trống = tự lấy theo .atlas)" />
+        <button id="loadUrlBtn">Nạp từ Link</button>
+      </div>
+      <div id="loadStatus" class="status">Đang quét thư mục...</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2. Trạng thái, Bộ phận & Hiển thị</div>
+      <div class="row">
+        <label>
+          Trạng thái (Animation)
+          <select id="animSelect"></select>
+        </label>
+        <label>
+          Skin
+          <select id="skinSelect"></select>
+        </label>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <span class="card-title" style="font-size:11px;">Danh sách trạng thái (<span id="animCount">0</span>)</span>
+          <button id="toggleAnimListBtn" class="secondary mini-btn">Ẩn</button>
+        </div>
+        <div id="animList" class="list-box"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <span class="card-title" style="font-size:11px;">Bộ phận / Layer (<span id="slotCount">0</span>)</span>
+          <button id="toggleSlotListBtn" class="secondary mini-btn">Hiện</button>
+        </div>
+        <div id="slotListWrap" style="display:none;flex-direction:column;gap:5px;">
+          <div class="row">
+            <button id="showAllSlotsBtn" class="secondary mini-btn" style="flex:1;">Bật hết</button>
+            <button id="hideAllSlotsBtn" class="secondary mini-btn" style="flex:1;">Tắt hết</button>
+          </div>
+          <div id="slotList" class="list-box"></div>
+        </div>
+      </div>
+      <div class="row">
+        <label>
+          Kích thước xuất (px)
+          <select id="canvasSizeSelect">
+            <option value="256">256 × 256</option>
+            <option value="400">400 × 400</option>
+            <option value="512" selected>512 × 512</option>
+            <option value="800">800 × 800</option>
+            <option value="1024">1024 × 1024</option>
+            <option value="1280">1280 × 1280</option>
+            <option value="1536">1536 × 1536</option>
+            <option value="2048">2048 × 2048</option>
+            <option value="custom">Tuỳ chỉnh (Rộng × Cao)...</option>
+          </select>
+        </label>
+        <label>
+          Tỉ lệ Spine (<span id="scaleVal">1</span>x)
+          <input id="scaleSlider" type="range" min="0.05" max="5" step="0.01" value="1" />
+        </label>
+      </div>
+      <div id="customSizeRow" class="row" style="display:none;">
+        <label>
+          Rộng (px)
+          <input id="customWidthInput" type="number" min="64" max="4096" step="2" value="1024" />
+        </label>
+        <label>
+          Cao (px)
+          <input id="customHeightInput" type="number" min="64" max="4096" step="2" value="1024" />
+        </label>
+      </div>
+      <div class="row">
+        <label>
+          Dịch X (<span id="offsetXVal">0</span>)
+          <input id="offsetXSlider" type="range" min="-1000" max="1000" step="1" value="0" />
+        </label>
+        <label>
+          Dịch Y (<span id="offsetYVal">0</span>)
+          <input id="offsetYSlider" type="range" min="-1000" max="1000" step="1" value="0" />
+        </label>
+      </div>
+      <div class="row">
+        <button id="autoFitBtn" class="secondary mini-btn" style="flex:1;">Căn vừa khung</button>
+        <button id="resetPosBtn" class="secondary mini-btn" style="flex:1;">Đặt lại X/Y</button>
+      </div>
+      <label>
+        Nền xem trước
+        <select id="bgSelect">
+          <option value="checker">Trong suốt (Caro)</option>
+          <option value="dark">Tối (#11131a)</option>
+          <option value="light">Sáng (#f3f4f6)</option>
+          <option value="green">Phông xanh (#00ff00)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="card">
+      <div class="card-title">3. Ghép ảnh Avatar (Tuỳ chọn)</div>
+      <div class="row">
+        <button id="pickAvatarBtn" class="secondary">Chọn ảnh Avatar</button>
+        <button id="clearAvatarBtn" class="secondary">Xoá</button>
+        <input id="avatarInput" type="file" accept="image/*" hidden />
+      </div>
+      <div class="row">
+        <label>
+          Cỡ Avatar (<span id="avScaleVal">58</span>%)
+          <input id="avScaleSlider" type="range" min="5" max="150" step="1" value="58" />
+        </label>
+        <label>
+          Bo góc
+          <select id="avShapeSelect">
+            <option value="circle" selected>Hình tròn</option>
+            <option value="square">Hình vuông</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">4. Xuất file ghép hoàn chỉnh</div>
+      <div class="row">
+        <label>
+          Định dạng
+          <select id="exportFormat">
+            <option value="gif">GIF động (Trong suốt)</option>
+            <option value="webm">WebM (Video trong suốt)</option>
+            <option value="apng">APNG (Ảnh động PNG)</option>
+            <option value="mp4">MP4 (Video H.264)</option>
+            <option value="png_seq">Chuỗi ảnh PNG</option>
+          </select>
+        </label>
+        <label>
+          FPS
+          <select id="exportFps">
+            <option value="24">24 fps</option>
+            <option value="30" selected>30 fps</option>
+            <option value="60">60 fps</option>
+          </select>
+        </label>
+      </div>
+      <button id="exportBtn" class="success">Xuất file ngay</button>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div id="exportStatus" class="status"></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <span class="pill" id="metaPill">Chưa nạp</span>
+      <span class="status" id="boundsInfo"></span>
+      <div style="flex:1"></div>
+      <label style="flex-direction:row;align-items:center;gap:6px;width:auto;">
+        Tốc độ:
+        <select id="speedSelect" style="width:auto;">
+          <option value="0.25">0.25x</option>
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1.0x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2.0x</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="stage-wrap checkerboard" id="stageWrap">
+      <div class="canvas-box" id="canvasBox" style="width:512px;height:512px;">
+        <canvas id="compositeCanvas" width="512" height="512"></canvas>
+        <canvas id="spineCanvas" width="512" height="512"></canvas>
+        <div class="canvas-resize-handle" id="canvasResizeHandle" title="Kéo để chỉnh kích thước khung"></div>
+      </div>
+    </div>
+
+    <div class="timeline-bar">
+      <button id="playPauseBtn" style="min-width:92px;">Tạm dừng</button>
+      <input id="timeSlider" type="range" min="0" max="4" step="0.001" value="0" />
+      <div class="time-label" id="timeLabel">0.00s / 0.00s</div>
+    </div>
+  </main>
+
+  <script>
+    const spineCanvas = document.getElementById("spineCanvas");
+    const compositeCanvas = document.getElementById("compositeCanvas");
+    const compCtx = compositeCanvas.getContext("2d");
+
+    const gl = spineCanvas.getContext("webgl2", {
+      alpha: true,
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: true,
+      antialias: true
+    }) || spineCanvas.getContext("webgl", {
+      alpha: true,
+      premultipliedAlpha: true,
+      preserveDrawingBuffer: true,
+      antialias: true
+    });
+
+    const renderer = new spine.SceneRenderer(spineCanvas, gl);
+
+    let skeleton = null;
+    let state = null;
+    let currentAtlas = null;
+    let currentBaseName = "hwjy_tx_wj";
+    let isPlaying = true;
+    let isExporting = false;
+    let lastTime = performance.now();
+    let animDuration = 4.0;
+    let avatarImg = null;
+    let hiddenSlots = new Set();
+
+    // UI refs
+    const dataModeEl = document.getElementById("dataMode");
+    const animSelectEl = document.getElementById("animSelect");
+    const animListEl = document.getElementById("animList");
+    const animCountEl = document.getElementById("animCount");
+    const slotListWrapEl = document.getElementById("slotListWrap");
+    const slotListEl = document.getElementById("slotList");
+    const slotCountEl = document.getElementById("slotCount");
+    const assetListWrapEl = document.getElementById("assetListWrap");
+    const assetListEl = document.getElementById("assetList");
+    const assetCountEl = document.getElementById("assetCount");
+    const skinSelectEl = document.getElementById("skinSelect");
+    const canvasSizeSelectEl = document.getElementById("canvasSizeSelect");
+    const scaleSliderEl = document.getElementById("scaleSlider");
+    const offsetXSliderEl = document.getElementById("offsetXSlider");
+    const offsetYSliderEl = document.getElementById("offsetYSlider");
+    const bgSelectEl = document.getElementById("bgSelect");
+    const stageWrapEl = document.getElementById("stageWrap");
+    const canvasBoxEl = document.getElementById("canvasBox");
+    const playPauseBtn = document.getElementById("playPauseBtn");
+    const timeSliderEl = document.getElementById("timeSlider");
+    const timeLabelEl = document.getElementById("timeLabel");
+    const speedSelectEl = document.getElementById("speedSelect");
+    const loadStatusEl = document.getElementById("loadStatus");
+    const exportStatusEl = document.getElementById("exportStatus");
+    const progressWrapEl = document.getElementById("progressWrap");
+    const progressFillEl = document.getElementById("progressFill");
+    const metaPillEl = document.getElementById("metaPill");
+    const boundsInfoEl = document.getElementById("boundsInfo");
+    const avScaleSliderEl = document.getElementById("avScaleSlider");
+    const avShapeSelectEl = document.getElementById("avShapeSelect");
+
+    function setStatus(el, msg, cls = "") {
+      el.className = "status " + cls;
+      el.textContent = msg;
+    }
+
+    function loadImageFromUrl(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Không tải được ảnh: " + url));
+        img.src = url;
+      });
+    }
+
+    async function buildSpineFromBuffers({ baseName, atlasText, pageImages, skeletonDataRaw, isBinary }) {
+      const atlas = new spine.TextureAtlas(atlasText);
+      const loader = new spine.AtlasAttachmentLoader(atlas);
+      let skeletonData;
+      if (isBinary) {
+        const binary = new spine.SkeletonBinary(loader);
+        skeletonData = binary.readSkeletonData(new Uint8Array(skeletonDataRaw));
+      } else {
+        const json = new spine.SkeletonJson(loader);
+        skeletonData = json.readSkeletonData(skeletonDataRaw);
+      }
+
+      // Only dispose old atlas & upload new WebGL textures after skeletonData parses cleanly
+      if (currentAtlas) {
+        currentAtlas.dispose();
+        currentAtlas = null;
+      }
+      for (const page of atlas.pages) {
+        const img = pageImages[page.name] || Object.values(pageImages)[0];
+        if (!img) throw new Error("Thiếu file ảnh texture: " + page.name);
+        const tex = new spine.GLTexture(gl, img, page.pma);
+        page.setTexture(tex);
+      }
+      currentAtlas = atlas;
+
+      skeleton = new spine.Skeleton(skeletonData);
+      skeleton.setToSetupPose();
+      skeleton.updateWorldTransform(spine.Physics.update);
+
+      const stateData = new spine.AnimationStateData(skeletonData);
+      state = new spine.AnimationState(stateData);
+
+      // Populate animations
+      animSelectEl.innerHTML = "";
+      animListEl.innerHTML = "";
+      animCountEl.textContent = skeletonData.animations.length;
+      for (const anim of skeletonData.animations) {
+        const opt = document.createElement("option");
+        opt.value = anim.name;
+        opt.textContent = `${anim.name} (${anim.duration.toFixed(2)}s)`;
+        animSelectEl.appendChild(opt);
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "list-item";
+        btn.dataset.anim = anim.name;
+        btn.innerHTML = `<span>${anim.name}</span><span class="pill">${anim.duration.toFixed(2)}s</span>`;
+        btn.onclick = () => selectAnimation(anim.name);
+        animListEl.appendChild(btn);
+      }
+      if (skeletonData.animations.length > 0) {
+        selectAnimation(skeletonData.animations[0].name);
+      }
+
+      // Populate slots
+      hiddenSlots.clear();
+      slotListEl.innerHTML = "";
+      slotCountEl.textContent = skeleton.slots.length;
+      for (const slot of skeleton.slots) {
+        const name = slot.data.name;
+        const lbl = document.createElement("label");
+        lbl.className = "slot-item";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = true;
+        cb.dataset.slot = name;
+        cb.onchange = () => {
+          if (cb.checked) {
+            hiddenSlots.delete(name);
+            slot.color.a = slot.data.color.a;
+          } else {
+            hiddenSlots.add(name);
+          }
+        };
+        const span = document.createElement("span");
+        span.textContent = name;
+        lbl.appendChild(cb);
+        lbl.appendChild(span);
+        slotListEl.appendChild(lbl);
+      }
+
+      // Populate skins
+      skinSelectEl.innerHTML = "";
+      for (const skin of skeletonData.skins) {
+        const opt = document.createElement("option");
+        opt.value = skin.name;
+        opt.textContent = skin.name;
+        skinSelectEl.appendChild(opt);
+      }
+
+      currentBaseName = baseName;
+      metaPillEl.textContent = `Spine ${skeletonData.version || "4.2"}`;
+      boundsInfoEl.textContent = `${baseName} • ${skeletonData.bones.length} bones • ${skeletonData.slots.length} slots`;
+      autoFitScale(skeletonData);
+      setStatus(loadStatusEl, `Đã ghép thành công: ${baseName}`, "ok");
+    }
+
+    function getCanvasDimensions() {
+      if (canvasSizeSelectEl.value === "custom") {
+        const w = Math.max(64, Math.min(4096, Number(document.getElementById("customWidthInput").value) || 1024));
+        const h = Math.max(64, Math.min(4096, Number(document.getElementById("customHeightInput").value) || 1024));
+        return { w, h };
+      }
+      const size = Number(canvasSizeSelectEl.value) || 512;
+      return { w: size, h: size };
+    }
+
+    function autoFitScale(skData) {
+      const { w: cw, h: ch } = getCanvasDimensions();
+      const w = skData.width || 180;
+      const h = skData.height || 180;
+      const fit = Number(Math.min((cw * 0.72) / w, (ch * 0.72) / h).toFixed(2));
+      scaleSliderEl.value = Math.min(5, Math.max(0.05, fit));
+      document.getElementById("scaleVal").textContent = scaleSliderEl.value;
+    }
+
+    function selectAnimation(name) {
+      if (!state) return;
+      const entry = state.setAnimation(0, name, true);
+      animDuration = entry.animation.duration || 1.0;
+      timeSliderEl.max = animDuration;
+      animSelectEl.value = name;
+      for (const btn of animListEl.querySelectorAll(".list-item")) {
+        btn.classList.toggle("active", btn.dataset.anim === name);
+      }
+    }
+
+    function groupSpineEntries(entries) {
+      // entries: [{ path, name, file? }]
+      const byDir = new Map();
+      for (const e of entries) {
+        const norm = e.path.replace(/\\/g, "/");
+        const parts = norm.split("/");
+        const fileName = parts.pop();
+        const dir = parts.join("/");
+        if (!byDir.has(dir)) byDir.set(dir, []);
+        byDir.get(dir).push({ ...e, path: norm, fileName, dir });
+      }
+
+      const sets = [];
+      for (const [dir, list] of byDir.entries()) {
+        const jsons = list.filter((x) => /\.json$/i.test(x.fileName));
+        const skels = list.filter((x) => /\.skel$/i.test(x.fileName));
+        const atlases = list.filter((x) => /\.atlas(\.txt)?$/i.test(x.fileName));
+        const imgs = list.filter((x) => /\.(png|jpg|jpeg|webp)$/i.test(x.fileName));
+
+        const bases = new Map();
+        for (const f of jsons) {
+          const base = f.fileName.replace(/\.json$/i, "");
+          if (!bases.has(base)) bases.set(base, { dir, base, json: null, skel: null, atlas: null, imgs });
+          bases.get(base).json = f;
+        }
+        for (const f of skels) {
+          const base = f.fileName.replace(/\.skel$/i, "");
+          if (!bases.has(base)) bases.set(base, { dir, base, json: null, skel: null, atlas: null, imgs });
+          bases.get(base).skel = f;
+        }
+        for (const item of bases.values()) {
+          item.atlas =
+            atlases.find((a) => a.fileName.replace(/\.atlas(\.txt)?$/i, "") === item.base) ||
+            atlases[0] ||
+            null;
+          if (item.atlas && item.imgs.length > 0) {
+            sets.push(item);
+          }
+        }
+      }
+      return sets;
+    }
+
+    function renderAssetList(sets, loadSetFn) {
+      assetListEl.innerHTML = "";
+      assetCountEl.textContent = sets.length;
+      if (sets.length === 0) {
+        assetListWrapEl.style.display = "none";
+        return;
+      }
+      assetListWrapEl.style.display = "flex";
+      sets.forEach((s, idx) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "list-item" + (idx === 0 ? " active" : "");
+        const label = s.dir ? `${s.dir}/${s.base}` : s.base;
+        const badge = [s.json ? "JSON" : "", s.skel ? "SKEL" : ""].filter(Boolean).join("+");
+        btn.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label}</span><span class="pill">${badge}</span>`;
+        btn.onclick = () => {
+          for (const b of assetListEl.querySelectorAll(".list-item")) b.classList.remove("active");
+          btn.classList.add("active");
+          loadSetFn(s);
+        };
+        assetListEl.appendChild(btn);
+      });
+    }
+
+    async function loadWorkspaceSet(s) {
+      const mode = dataModeEl.value;
+      const useBinary = mode === "skel" ? Boolean(s.skel) : !s.json;
+      const dataEntry = useBinary ? s.skel : s.json;
+
+      const [atlasText, dataRes, ...imgs] = await Promise.all([
+        fetch("/assets/" + s.atlas.path.split("/").map(encodeURIComponent).join("/")).then((r) => r.text()),
+        fetch("/assets/" + dataEntry.path.split("/").map(encodeURIComponent).join("/")),
+        ...s.imgs.map(async (f) => [
+          f.fileName,
+          await loadImageFromUrl("/assets/" + f.path.split("/").map(encodeURIComponent).join("/")),
+        ]),
+      ]);
+
+      const pageImages = Object.fromEntries(imgs);
+      const skeletonDataRaw = useBinary ? await dataRes.arrayBuffer() : await dataRes.text();
+
+      await buildSpineFromBuffers({
+        baseName: s.base,
+        atlasText,
+        pageImages,
+        skeletonDataRaw,
+        isBinary: useBinary,
+      });
+    }
+
+    async function loadFromWorkspace() {
+      try {
+        setStatus(loadStatusEl, "Đang tải file từ thư mục...");
+        const res = await fetch("/api/assets");
+        const { files } = await res.json();
+        const sets = groupSpineEntries(files.map((p) => ({ path: p })));
+        renderAssetList(sets, (s) => loadWorkspaceSet(s).catch((err) => setStatus(loadStatusEl, "Lỗi nạp file: " + err.message, "err")));
+
+        if (sets.length === 0) {
+          setStatus(loadStatusEl, "Không tìm thấy đủ bộ .json/.skel + .atlas + .png trong thư mục.", "err");
+          return;
+        }
+        await loadWorkspaceSet(sets[0]);
+      } catch (err) {
+        console.error(err);
+        setStatus(loadStatusEl, "Lỗi nạp file: " + err.message, "err");
+      }
+    }
+
+    async function loadLocalSet(s) {
+      const useBinary = dataModeEl.value === "skel" ? Boolean(s.skel) : !s.json;
+      const dataFile = (useBinary ? s.skel : s.json).file;
+      const atlasText = await s.atlas.file.text();
+      const skeletonDataRaw = useBinary ? await dataFile.arrayBuffer() : await dataFile.text();
+
+      const pageImages = {};
+      for (const imgEntry of s.imgs) {
+        const url = URL.createObjectURL(imgEntry.file);
+        pageImages[imgEntry.fileName] = await loadImageFromUrl(url);
+        URL.revokeObjectURL(url);
+      }
+
+      await buildSpineFromBuffers({
+        baseName: s.base,
+        atlasText,
+        pageImages,
+        skeletonDataRaw,
+        isBinary: useBinary,
+      });
+    }
+
+    async function loadFromFileList(fileList) {
+      try {
+        const files = Array.from(fileList);
+        const entries = files.map((f) => ({
+          path: f.webkitRelativePath || f.name,
+          file: f,
+        }));
+        const sets = groupSpineEntries(entries);
+        renderAssetList(sets, (s) => loadLocalSet(s).catch((err) => setStatus(loadStatusEl, "Lỗi đọc file: " + err.message, "err")));
+
+        if (sets.length === 0) {
+          setStatus(loadStatusEl, "Vui lòng chọn đủ .json/.skel, .atlas(.txt), và .png!", "err");
+          return;
+        }
+        await loadLocalSet(sets[0]);
+      } catch (err) {
+        console.error(err);
+        setStatus(loadStatusEl, "Lỗi đọc file: " + err.message, "err");
+      }
+    }
+
+    async function fetchViaProxy(targetUrl) {
+      const res = await fetch("/api/fetch-url?url=" + encodeURIComponent(targetUrl));
+      if (!res.ok) {
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const j = await res.json();
+          if (j.error) errMsg = j.error;
+        } catch {}
+        throw new Error(errMsg);
+      }
+      return res;
+    }
+
+    async function loadFromUrls() {
+      const rawInput = document.getElementById("urlSkeleton").value.trim();
+      let atlasUrl = document.getElementById("urlAtlas").value.trim();
+      let pngUrlInput = document.getElementById("urlPng").value.trim();
+
+      if (!rawInput) {
+        setStatus(loadStatusEl, "Vui lòng dán link file (.json, .skel, .atlas hoặc .png)!", "err");
+        return;
+      }
+
+      try {
+        setStatus(loadStatusEl, "Đang tải file từ link...");
+
+        let skelUrl = rawInput;
+        // If user pasted .atlas or .png into the first box, auto-infer the rest
+        if (/\.atlas(\.txt)?(\?.*)?$/i.test(rawInput)) {
+          if (!atlasUrl) atlasUrl = rawInput;
+          skelUrl = "";
+        } else if (/\.(png|jpg|jpeg|webp)(\?.*)?$/i.test(rawInput)) {
+          if (!pngUrlInput) pngUrlInput = rawInput;
+          skelUrl = "";
+        }
+
+        const baseSource = skelUrl || atlasUrl || pngUrlInput;
+
+        // 1. Resolve & fetch .atlas
+        if (!atlasUrl) {
+          atlasUrl = baseSource.replace(/\.(json|skel|png|jpg|jpeg|webp)(\?.*)?$/i, ".atlas$2");
+        }
+        let atlasRes;
+        try {
+          atlasRes = await fetchViaProxy(atlasUrl);
+        } catch (e) {
+          if (!document.getElementById("urlAtlas").value.trim()) {
+            const altAtlas = baseSource.replace(/\.(json|skel|png|jpg|jpeg|webp)(\?.*)?$/i, ".atlas.txt$2");
+            atlasRes = await fetchViaProxy(altAtlas);
+            atlasUrl = altAtlas;
+          } else {
+            throw e;
+          }
+        }
+        const atlasText = await atlasRes.text();
+
+        // 2. Resolve & fetch .skel or .json
+        let isBinary = false;
+        let skelRes;
+        if (skelUrl) {
+          isBinary = /\.skel(\?|$)/i.test(skelUrl);
+          skelRes = await fetchViaProxy(skelUrl);
+        } else {
+          const preferSkel = dataModeEl.value === "skel";
+          const cand1 = baseSource.replace(/\.(atlas(\.txt)?|png|jpg|jpeg|webp)(\?.*)?$/i, preferSkel ? ".skel$3" : ".json$3");
+          const cand2 = baseSource.replace(/\.(atlas(\.txt)?|png|jpg|jpeg|webp)(\?.*)?$/i, preferSkel ? ".json$3" : ".skel$3");
+          try {
+            skelRes = await fetchViaProxy(cand1);
+            skelUrl = cand1;
+            isBinary = preferSkel;
+          } catch {
+            skelRes = await fetchViaProxy(cand2);
+            skelUrl = cand2;
+            isBinary = !preferSkel;
+          }
+        }
+        const skeletonDataRaw = isBinary ? await skelRes.arrayBuffer() : await skelRes.text();
+
+        // 3. Parse atlas to discover referenced texture page names
+        const tempAtlas = new spine.TextureAtlas(atlasText);
+        const pageImages = {};
+        for (const page of tempAtlas.pages) {
+          const imgUrl = pngUrlInput || new URL(page.name, atlasUrl).toString();
+          const imgRes = await fetchViaProxy(imgUrl);
+          const blob = await imgRes.blob();
+          const objUrl = URL.createObjectURL(blob);
+          pageImages[page.name] = await loadImageFromUrl(objUrl);
+          URL.revokeObjectURL(objUrl);
+        }
+        tempAtlas.dispose();
+
+        const baseName = decodeURIComponent(
+          new URL(skelUrl).pathname.split("/").pop() || "spine_url"
+        ).replace(/\.(json|skel)$/i, "");
+
+        await buildSpineFromBuffers({
+          baseName,
+          atlasText,
+          pageImages,
+          skeletonDataRaw,
+          isBinary,
+        });
+      } catch (err) {
+        console.error(err);
+        setStatus(loadStatusEl, "Lỗi nạp từ link: " + err.message, "err");
+      }
+    }
+
+    function updateCanvasSize() {
+      const customRow = document.getElementById("customSizeRow");
+      customRow.style.display = canvasSizeSelectEl.value === "custom" ? "flex" : "none";
+      const { w, h } = getCanvasDimensions();
+      spineCanvas.width = w;
+      spineCanvas.height = h;
+      compositeCanvas.width = w;
+      compositeCanvas.height = h;
+      const maxW = Math.max(200, window.innerWidth - 400);
+      const maxH = Math.max(200, window.innerHeight - 160);
+      const dispScale = Math.min(1, maxW / w, maxH / h);
+      canvasBoxEl.style.width = Math.round(w * dispScale) + "px";
+      canvasBoxEl.style.height = Math.round(h * dispScale) + "px";
+    }
+
+    function renderFrame() {
+      const w = spineCanvas.width;
+      const h = spineCanvas.height;
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      if (skeleton && state) {
+        const scale = Number(scaleSliderEl.value);
+        const ox = Number(offsetXSliderEl.value);
+        const oy = Number(offsetYSliderEl.value);
+
+        skeleton.x = ox;
+        skeleton.y = oy;
+        skeleton.scaleX = scale;
+        skeleton.scaleY = scale;
+
+        state.apply(skeleton);
+        if (hiddenSlots.size > 0) {
+          for (const slot of skeleton.slots) {
+            if (hiddenSlots.has(slot.data.name)) {
+              slot.color.a = 0;
+            }
+          }
+        }
+        skeleton.update(0);
+        skeleton.updateWorldTransform(spine.Physics.update);
+
+        renderer.camera.setViewport(w, h);
+        renderer.camera.position.x = 0;
+        renderer.camera.position.y = 0;
+        renderer.camera.zoom = 1;
+        renderer.camera.update();
+
+        renderer.begin();
+        renderer.skeletonRenderer.premultipliedAlpha = true;
+        renderer.drawSkeleton(skeleton, true);
+        renderer.end();
+      }
+
+      // Composite avatar + Spine frame onto compositeCanvas
+      compCtx.clearRect(0, 0, w, h);
+      if (avatarImg) {
+        const pct = Number(avScaleSliderEl.value) / 100;
+        const avSize = Math.min(w, h) * pct;
+        const cx = w / 2 + Number(offsetXSliderEl.value);
+        const cy = h / 2 - Number(offsetYSliderEl.value);
+        compCtx.save();
+        compCtx.beginPath();
+        if (avShapeSelectEl.value === "circle") {
+          compCtx.arc(cx, cy, avSize / 2, 0, Math.PI * 2);
+        } else {
+          compCtx.rect(cx - avSize / 2, cy - avSize / 2, avSize, avSize);
+        }
+        compCtx.clip();
+        const ratio = Math.max(avSize / avatarImg.width, avSize / avatarImg.height);
+        const dw = avatarImg.width * ratio;
+        const dh = avatarImg.height * ratio;
+        compCtx.drawImage(avatarImg, cx - dw / 2, cy - dh / 2, dw, dh);
+        compCtx.restore();
+      }
+      compCtx.drawImage(spineCanvas, 0, 0);
+    }
+
+    function loop(now) {
+      const dt = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (!isExporting) {
+        if (state && isPlaying) {
+          const speed = Number(speedSelectEl.value);
+          state.update(dt * speed);
+        }
+        renderFrame();
+
+        if (state && state.tracks[0]) {
+          const t = state.tracks[0].trackTime % animDuration;
+          timeSliderEl.value = t;
+          timeLabelEl.textContent = `${t.toFixed(2)}s / ${animDuration.toFixed(2)}s`;
+        }
+      }
+      requestAnimationFrame(loop);
+    }
+
+    // Export pipeline
+    const EXPORT_FILE_TYPES = {
+      gif: [{ description: "GIF Image", accept: { "image/gif": [".gif"] } }],
+      webm: [{ description: "WebM Video", accept: { "video/webm": [".webm"] } }],
+      apng: [{ description: "APNG Image", accept: { "image/png": [".png"] } }],
+      mp4: [{ description: "MP4 Video", accept: { "video/mp4": [".mp4"] } }],
+    };
+
+    const EXPORT_EXTENSIONS = {
+      gif: "gif",
+      webm: "webm",
+      apng: "png",
+      mp4: "mp4",
+    };
+
+    async function exportAnimation() {
+      if (!skeleton || !state) return;
+      isExporting = true;
+      const exportBtn = document.getElementById("exportBtn");
+      exportBtn.disabled = true;
+
+      try {
+        const format = document.getElementById("exportFormat").value;
+        const fps = Number(document.getElementById("exportFps").value);
+        const totalFrames = Math.max(1, Math.round(animDuration * fps));
+        const safeBase = (currentBaseName || "spine_output").replace(/[^a-zA-Z0-9_-]/g, "_");
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+
+        let fileHandle = null;
+        let dirHandle = null;
+
+        if (format === "png_seq") {
+          if (!window.showDirectoryPicker) {
+            throw new Error("Trình duyệt không hỗ trợ chọn thư mục lưu chuỗi ảnh PNG (hãy dùng Chrome hoặc Edge).");
+          }
+          try {
+            dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+          } catch (pickErr) {
+            if (pickErr.name === "AbortError") {
+              setStatus(exportStatusEl, "Đã hủy xuất file.");
+              return;
+            }
+            throw pickErr;
+          }
+        } else if (window.showSaveFilePicker) {
+          const ext = EXPORT_EXTENSIONS[format] || "bin";
+          try {
+            fileHandle = await window.showSaveFilePicker({
+              suggestedName: `${safeBase}_${stamp}.${ext}`,
+              types: EXPORT_FILE_TYPES[format] || [],
+            });
+          } catch (pickErr) {
+            if (pickErr.name === "AbortError") {
+              setStatus(exportStatusEl, "Đã hủy xuất file.");
+              return;
+            }
+            throw pickErr;
+          }
+        }
+
+        progressWrapEl.style.display = "block";
+        progressFillEl.style.width = "0%";
+
+        const track = state.tracks[0];
+        const prevTime = track ? track.trackTime : 0;
+
+        if (format === "png_seq") {
+          setStatus(exportStatusEl, `Đang xuất ${totalFrames} khung hình PNG...`);
+          for (let i = 0; i < totalFrames; i++) {
+            const t = (i / fps);
+            if (track) track.trackTime = t;
+            renderFrame();
+
+            const blob = await new Promise((resolve) =>
+              compositeCanvas.toBlob(resolve, "image/png")
+            );
+            const fname = `frame_${String(i).padStart(5, "0")}.png`;
+            const fh = await dirHandle.getFileHandle(fname, { create: true });
+            const writable = await fh.createWritable();
+            await writable.write(blob);
+            await writable.close();
+
+            const pct = Math.round(((i + 1) / totalFrames) * 100);
+            progressFillEl.style.width = pct + "%";
+            setStatus(exportStatusEl, `Đang lưu khung ${i + 1}/${totalFrames}...`);
+          }
+          if (track) track.trackTime = prevTime;
+          setStatus(exportStatusEl, `Hoàn tất! Đã lưu ${totalFrames} ảnh PNG vào thư mục đã chọn.`, "ok");
+          return;
+        }
+
+        setStatus(exportStatusEl, `Đang khởi tạo xuất ${totalFrames} khung hình (${fps} fps)...`);
+        const startRes = await fetch("/api/export-start", { method: "POST" });
+        const { sessionId } = await startRes.json();
+
+        for (let i = 0; i < totalFrames; i++) {
+          const t = (i / fps);
+          if (track) {
+            track.trackTime = t;
+          }
+          renderFrame();
+
+          const blob = await new Promise((resolve) =>
+            compositeCanvas.toBlob(resolve, "image/png")
+          );
+          const buf = await blob.arrayBuffer();
+
+          await fetch("/api/export-frame", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/octet-stream",
+              "x-session-id": sessionId,
+              "x-frame-index": String(i),
+            },
+            body: buf,
+          });
+
+          const pct = Math.round(((i + 1) / totalFrames) * 85);
+          progressFillEl.style.width = pct + "%";
+          setStatus(exportStatusEl, `Đang render khung ${i + 1}/${totalFrames}...`);
+        }
+
+        if (track) track.trackTime = prevTime;
+
+        setStatus(exportStatusEl, "Đang ghép bằng FFmpeg...");
+        progressFillEl.style.width = "92%";
+
+        const finishRes = await fetch("/api/export-finish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            format,
+            fps,
+            baseName: currentBaseName,
+          }),
+        });
+        const result = await finishRes.json();
+        if (!result.ok) throw new Error(result.error || "Xuất thất bại");
+
+        progressFillEl.style.width = "100%";
+        if (fileHandle) {
+          setStatus(exportStatusEl, "Đang lưu file vào vị trí đã chọn...");
+          const fileRes = await fetch(result.url);
+          if (!fileRes.ok) throw new Error("Không thể tải file đã xuất");
+          const writable = await fileHandle.createWritable();
+          if (fileRes.body && fileRes.body.pipeTo) {
+            await fileRes.body.pipeTo(writable);
+          } else {
+            const outBlob = await fileRes.blob();
+            await writable.write(outBlob);
+            await writable.close();
+          }
+          setStatus(exportStatusEl, `Hoàn tất! Đã lưu file: ${fileHandle.name}`, "ok");
+        } else {
+          const a = document.createElement("a");
+          a.href = result.url;
+          a.download = result.filename;
+          a.click();
+          setStatus(exportStatusEl, `Hoàn tất! Đã tải về: ${result.filename}`, "ok");
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus(exportStatusEl, "Lỗi xuất: " + err.message, "err");
+      } finally {
+        isExporting = false;
+        exportBtn.disabled = false;
+      }
+    }
+
+    // Event bindings
+    document.getElementById("reloadWorkspaceBtn").onclick = loadFromWorkspace;
+    document.getElementById("pickFolderBtn").onclick = () => document.getElementById("folderInput").click();
+    document.getElementById("folderInput").onchange = (e) => {
+      if (e.target.files.length) loadFromFileList(e.target.files);
+    };
+    document.getElementById("toggleAnimListBtn").onclick = (e) => {
+      const hidden = animListEl.style.display === "none";
+      animListEl.style.display = hidden ? "flex" : "none";
+      e.target.textContent = hidden ? "Ẩn" : "Hiện";
+    };
+    document.getElementById("toggleSlotListBtn").onclick = (e) => {
+      const hidden = slotListWrapEl.style.display === "none";
+      slotListWrapEl.style.display = hidden ? "flex" : "none";
+      e.target.textContent = hidden ? "Ẩn" : "Hiện";
+    };
+    document.getElementById("showAllSlotsBtn").onclick = () => {
+      hiddenSlots.clear();
+      if (skeleton) {
+        for (const slot of skeleton.slots) slot.color.a = slot.data.color.a;
+      }
+      for (const cb of slotListEl.querySelectorAll("input[type=checkbox]")) cb.checked = true;
+    };
+    document.getElementById("hideAllSlotsBtn").onclick = () => {
+      for (const cb of slotListEl.querySelectorAll("input[type=checkbox]")) {
+        cb.checked = false;
+        hiddenSlots.add(cb.dataset.slot);
+      }
+    };
+    document.getElementById("loadUrlBtn").onclick = loadFromUrls;
+    dataModeEl.onchange = loadFromWorkspace;
+    canvasSizeSelectEl.onchange = updateCanvasSize;
+    document.getElementById("customWidthInput").onchange = updateCanvasSize;
+    document.getElementById("customHeightInput").onchange = updateCanvasSize;
+
+    document.getElementById("autoFitBtn").onclick = () => {
+      if (skeleton) autoFitScale(skeleton.data);
+    };
+    document.getElementById("resetPosBtn").onclick = () => {
+      offsetXSliderEl.value = 0;
+      offsetYSliderEl.value = 0;
+      document.getElementById("offsetXVal").textContent = "0";
+      document.getElementById("offsetYVal").textContent = "0";
+    };
+
+    // Drag to pan, corner handle to resize, wheel to zoom directly on the canvas preview
+    let isDraggingCanvas = false;
+    let isResizingCanvas = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragInitOX = 0;
+    let dragInitOY = 0;
+    let resizeInitW = 512;
+    let resizeInitH = 512;
+
+    const canvasResizeHandleEl = document.getElementById("canvasResizeHandle");
+    canvasResizeHandleEl.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      if (e.button !== 0) return;
+      isResizingCanvas = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      const dims = getCanvasDimensions();
+      resizeInitW = dims.w;
+      resizeInitH = dims.h;
+      canvasSizeSelectEl.value = "custom";
+      document.getElementById("customSizeRow").style.display = "flex";
+    });
+
+    canvasBoxEl.style.cursor = "grab";
+    canvasBoxEl.addEventListener("mousedown", (e) => {
+      if (e.button !== 0 || isResizingCanvas) return;
+      isDraggingCanvas = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragInitOX = Number(offsetXSliderEl.value);
+      dragInitOY = Number(offsetYSliderEl.value);
+      canvasBoxEl.style.cursor = "grabbing";
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (isResizingCanvas) {
+        const nextW = Math.max(64, Math.min(4096, Math.round(resizeInitW + (e.clientX - dragStartX) * 2)));
+        const nextH = Math.max(64, Math.min(4096, Math.round(resizeInitH + (e.clientY - dragStartY) * 2)));
+        document.getElementById("customWidthInput").value = nextW;
+        document.getElementById("customHeightInput").value = nextH;
+        updateCanvasSize();
+        return;
+      }
+      if (!isDraggingCanvas) return;
+      const rect = canvasBoxEl.getBoundingClientRect();
+      const ratioX = spineCanvas.width / (rect.width || 1);
+      const ratioY = spineCanvas.height / (rect.height || 1);
+      const nextX = Math.max(-1000, Math.min(1000, Math.round(dragInitOX + (e.clientX - dragStartX) * ratioX)));
+      const nextY = Math.max(-1000, Math.min(1000, Math.round(dragInitOY - (e.clientY - dragStartY) * ratioY)));
+      offsetXSliderEl.value = nextX;
+      offsetYSliderEl.value = nextY;
+      document.getElementById("offsetXVal").textContent = nextX;
+      document.getElementById("offsetYVal").textContent = nextY;
+    });
+    window.addEventListener("mouseup", () => {
+      if (isResizingCanvas) {
+        isResizingCanvas = false;
+      }
+      if (isDraggingCanvas) {
+        isDraggingCanvas = false;
+        canvasBoxEl.style.cursor = "grab";
+      }
+    });
+    canvasBoxEl.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const cur = Number(scaleSliderEl.value);
+      const delta = e.deltaY < 0 ? 0.05 : -0.05;
+      const next = Math.min(5, Math.max(0.05, Number((cur + delta).toFixed(2))));
+      scaleSliderEl.value = next;
+      document.getElementById("scaleVal").textContent = next;
+    }, { passive: false });
+
+    scaleSliderEl.oninput = () => {
+      document.getElementById("scaleVal").textContent = scaleSliderEl.value;
+    };
+    offsetXSliderEl.oninput = () => {
+      document.getElementById("offsetXVal").textContent = offsetXSliderEl.value;
+    };
+    offsetYSliderEl.oninput = () => {
+      document.getElementById("offsetYVal").textContent = offsetYSliderEl.value;
+    };
+    avScaleSliderEl.oninput = () => {
+      document.getElementById("avScaleVal").textContent = avScaleSliderEl.value;
+    };
+
+    animSelectEl.onchange = () => {
+      selectAnimation(animSelectEl.value);
+    };
+
+    skinSelectEl.onchange = () => {
+      if (!skeleton) return;
+      skeleton.setSkinByName(skinSelectEl.value);
+      skeleton.setSlotsToSetupPose();
+    };
+
+    bgSelectEl.onchange = () => {
+      const v = bgSelectEl.value;
+      stageWrapEl.classList.remove("checkerboard");
+      if (v === "checker") {
+        stageWrapEl.classList.add("checkerboard");
+        stageWrapEl.style.backgroundColor = "#161820";
+      } else if (v === "dark") {
+        stageWrapEl.style.backgroundColor = "#11131a";
+      } else if (v === "light") {
+        stageWrapEl.style.backgroundColor = "#f3f4f6";
+      } else if (v === "green") {
+        stageWrapEl.style.backgroundColor = "#00ff00";
+      }
+    };
+
+    playPauseBtn.onclick = () => {
+      isPlaying = !isPlaying;
+      playPauseBtn.textContent = isPlaying ? "Tạm dừng" : "Phát tiếp";
+    };
+
+    timeSliderEl.oninput = () => {
+      if (state && state.tracks[0]) {
+        isPlaying = false;
+        playPauseBtn.textContent = "Phát tiếp";
+        state.tracks[0].trackTime = Number(timeSliderEl.value);
+      }
+    };
+
+    // File drag & drop
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("fileInput");
+    dropzone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      if (e.target.files.length) loadFromFileList(e.target.files);
+    };
+    dropzone.ondragover = (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    };
+    dropzone.ondragleave = () => dropzone.classList.remove("dragover");
+    dropzone.ondrop = (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      if (e.dataTransfer.files.length) loadFromFileList(e.dataTransfer.files);
+    };
+
+    // Avatar upload
+    const avatarInput = document.getElementById("avatarInput");
+    document.getElementById("pickAvatarBtn").onclick = () => avatarInput.click();
+    document.getElementById("clearAvatarBtn").onclick = () => { avatarImg = null; };
+    avatarInput.onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      avatarImg = await loadImageFromUrl(url);
+      URL.revokeObjectURL(url);
+    };
+
+    document.getElementById("exportBtn").onclick = exportAnimation;
+
+    updateCanvasSize();
+    loadFromWorkspace();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
